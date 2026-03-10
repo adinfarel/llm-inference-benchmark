@@ -3,7 +3,7 @@
 > Benchmarking 10+ inference optimization techniques on TinyLlama 1.1B
 > quantization, pruning, distillation, flash attention, onnx, and serving strategies
 > on a GPU environment. Every result is backed by profiler traces and explained
-> from hardware level, not just reported
+> from hardware level, not just reported.
 
 ![Architecture Overview](docs/images/inference-flow-bg.png)
 
@@ -96,3 +96,39 @@ not just averages — because production SLAs are defined at p99, not mean.
 | Serving | Batch size 1, 2, 4, 8, 16, 32 | What is the throughput sweet spot? |
 | Context Length | Prompt 32 to 1024 tokens | Does TTFT scale quadratically? |
 | KV Cache | Generate up to 1000 tokens | When does memory pressure hit? |
+
+## How to Reproduce
+
+All experiments are designed to run end-to-end with a single command after environment setup. Full reproducibility is a core
+requirement of this project - not an afterthought
+
+### 1. Clone the repository
+
+git clone https://github.com/adinfarel/llm-inference-benchmark.git
+cd llm-inference-benchmark
+
+### 2. Set up the environment
+
+bash setup.sh
+
+This script installs all dependencies, confirms CUDA availability,
+and validates the model can be loaded before any experiment runs.
+
+### 3. Run all experiments
+
+python experiments/run_all.py
+
+Or run individual sections:
+
+python experiments/run_quantization.py
+python experiments/run_flash_attention.py
+python experiments/run_kv_cache.py
+
+### 4. View results
+
+Results are saved to results/metrics/ as CSV files.
+Analysis notebooks are in analysis/ - open them in order,
+starting from 01_quantization.ipynb.
+
+> Note: All experiments require a CUDA-capable GPU with minimum 16GB VRAM
+> Tested on GCP n1-standard-4 with NVIDIA t4
