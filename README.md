@@ -104,7 +104,7 @@ requirement of this project - not an afterthought
 
 ### 1. Clone the repository
 
-git clone https://github.com/adinfarel/llm-inference-benchmark.git
+git clone https://github.com/adinfarel/llm-inference-benchmark.git  
 cd llm-inference-benchmark
 
 ### 2. Set up the environment
@@ -120,15 +120,15 @@ python experiments/run_all.py
 
 Or run individual sections:
 
-python experiments/run_quantization.py
-python experiments/run_flash_attention.py
-python experiments/run_kv_cache.py
+python experiments/run_quantization.py  
+python experiments/run_flash_attention.py  
+python experiments/run_kv_cache.py  
 
 ### 4. View results
 
-Results are saved to results/metrics/ as CSV files.
-Analysis notebooks are in analysis/ - open them in order,
-starting from 01_quantization.ipynb.
+Results are saved to results/metrics/ as CSV files.  
+Analysis notebooks are in analysis/ - open them in order,  
+starting from 01_quantization.ipynb.  
 
 > Note: All experiments require a CUDA-capable GPU with minimum 16GB VRAM
 > Tested on GCP n1-standard-4 with NVIDIA t4
