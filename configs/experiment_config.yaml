@@ -1,0 +1,103 @@
+# Model configuration
+model:
+  name: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+  device: "cude"
+  torch_dtype: "float16"
+  cache_dir: "./model_cache"
+
+# Prompt used across all experiments for consistency
+prompt:
+  system: "You are a helpful assistant"
+  user: "Explain the concept of neural networks in simple terms."
+
+# Core benchmark settings
+benchmark:
+  max_new_token: 100
+  n_runs: 3
+  warmup_runs: 1
+  do_sample: false
+  temperature: 1.0
+
+# Perplexity evaluation
+evaluation:
+  dataset: "wikitext"
+  dataset_config: "wikitext-103-raw-v1"
+  max_samples: 100
+  stride: 512
+
+# Quantization experiment settings
+quantization:
+  int8:
+    load_in_8bit: true
+    llm_int8_threshold: 6.0
+  int4_nf4:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: "float16"
+  gptq:
+    model_name: "TheBloke/TinyLlama-1.1B-Chat-v1.0-GPTQ"
+    device: "cuda:0"
+    use_triton: false
+  awq:
+    model_name: "TheBloke/TinyLlama-1.1B-Chat-v1.0-AWQ"
+    fuse_layers: true
+  
+# Pruning experiment settings
+pruning:
+  sparsity_levels: [0.1, 0.3, 0.5, 0.7]
+  method: "l1_unstructured"
+  target_modules: ['q_proj', 'k_proj', 'v_proj', 'o_proj']
+
+# Distillation experiment settings
+distillation:
+  student_config:
+    n_embd: 256
+    n_layer: 4
+    n_head: 4
+    n_positions: 64
+  temperature: 4.0
+  alpha: 0.5
+  beta: 0.5
+  learning_rate: 0.0001
+  n_steps: 1000
+  batch_size: 4
+  max_length: 64
+  dataset: "wikitext"
+  dataset_config: "wikitext-2-raw-v1"
+
+# Flash Attention experiment settings
+flash_attention:
+  sequence_lengths: [128, 256, 512, 1024]
+  measure_ttft: true
+  measure_itl: true
+
+# Batching experiment settings
+batching:
+  batch_sizes: [1, 2, 4, 8, 16, 32]
+  max_new_tokens: 50
+
+# Context length experiment settings
+context_length:
+  prompt_length: [32, 64, 128, 256, 512, 1024]
+  measure_ttft_only: true
+
+# KV cache experiment settings
+kv_cache:
+  generate_lengths: [100, 300, 500, 750, 1000]
+  measure_itl_per_position: true
+
+# Profiler
+profiler:
+  max_new_tokens: 20
+  activities: ["cpu", "cuda"]
+  record_shapes: true
+  profile_memory: true
+  with_stack: true
+
+# Results output
+results:
+  base_dir: "./results"
+  metrics_dir: "./results/metrics"
+  traces_dir: "./results/traces"
+  figures_dir: "./results/figures"
