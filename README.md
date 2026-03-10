@@ -41,20 +41,35 @@ Standard attention has O(n*n) memory complexity - every token attends to every o
 **Q4 - At which token position does KV cache pressure become visible?**
 KV cache grows every generated token. At same point, the cache size starts pressuring GPU memory and ITL begins to rise. This project maps the inflection point by measuring ITL per token position across 1000 tokens.
 
-**Q5 — What is the optimal batch size for throughput on a T4?**  
+**Q5 - What is the optimal batch size for throughput on a T4?**  
 Batch size 1 underutilizes GPU parallelism. Too large a batch causes
 memory pressure. There is a sweet spot where throughput peaks before
 latency per request becomes unacceptable. This project finds that point
 across batch sizes 1, 2, 4, 8, 16, and 32.
 
-**Q6 — Does prompt length affect TTFT in a way consistent with O(n²) complexity?**  
+**Q6 - Does prompt length affect TTFT in a way consistent with O(n²) complexity?**  
 Prefill — processing the input prompt before generating the first token —
 is quadratic in sequence length for standard attention. This project measures
 TTFT across prompt lengths 32 to 1024 tokens and tests whether Flash Attention
 changes that scaling behavior.
 
-**Q7 — With proper training, how much of the distillation quality gap closes?**  
+**Q7 - With proper training, how much of the distillation quality gap closes?**  
 The CPU exploration used only 50 training steps — student perplexity was 18,846
 versus teacher perplexity of 7.87. That was underfitting, not a failure of
 distillation. With 1000+ steps on WikiText, this project measures how close
 the student can get while keeping its 35x speed advantage.
+
+## Environment
+
+| Component | Details |
+|-----------|---------|
+| Cloud | Google Cloud Platform |
+| Instance | n1-standard-4 + NVIDIA T4 GPU |
+| VRAM | 16GB GDDR6 |
+| CUDA | 12.1 |
+| Python | 3.10 |
+| PyTorch | 2.1.0+cu121 |
+| Transformers | 4.38.0 |
+| Model | TinyLlama/TinyLlama-1.1B-Chat-v1.0 |
+| Parameters | 1.1 Billion |
+| Evaluation Dataset | WikiText-103 |
