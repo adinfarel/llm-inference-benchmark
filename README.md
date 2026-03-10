@@ -11,3 +11,16 @@
 **Hardware:** GCP T4 GPU (16GB VRAM)    
 **Model:** TinyLLama/TinyLlama-1.1B-Chat-v1.0  
 **Status:** In Progress - actively running experiments  
+
+## Motivation
+
+Most LLM inference optimization tutorials stop at showing numbers.
+This project started differently - from a question that kept coming back:
+
+> *"Why is quantized inference sometimes slower than the baseline"*
+
+The answer turned out to be a hardware story. Running an initial exploration on CPU revealed that optimization
+techniques behave very differently depending on the hardware they run on. int4 quantization was **7x slowe** than float32
+on CPU - not because of a bug, but because CPU has no native integer arithmetic. The model had to dequantize weights back to float32 before every computation, making the overhead larger than the memory saving
+
+That exploration raised 7 questions that could not be answered on CPU alone. This project exists to answer all of them - on a GPU where these techniques were actually designed to run.
