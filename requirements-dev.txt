@@ -1,0 +1,4 @@
+# Development only - not needed on GCP
+ipywidgets==8.1.1
+black==24.1.1
+isort==5.13.2
