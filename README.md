@@ -73,3 +73,26 @@ the student can get while keeping its 35x speed advantage.
 | Model | TinyLlama/TinyLlama-1.1B-Chat-v1.0 |
 | Parameters | 1.1 Billion |
 | Evaluation Dataset | WikiText-103 |
+
+## Experiment Overview
+
+Each experiment measures the same core metrics to ensure fair comparison.
+Latency metrics are reported with p50, p90, and p99 percentiles -
+not just averages — because production SLAs are defined at p99, not mean.
+
+- **TTFT** — Time to First Token, how fast the model starts responding
+- **TPOT** — Time Per Output Token, reported as mean, p50, p90, p99
+- **ITL** — Inter-Token Latency per token position, up to 1000 tokens
+- **Throughput** — tokens per second under sustained load
+- **Perplexity** — quality on WikiText-103, not a single reference sentence
+
+| Section | Techniques | Key Question |
+|---------|------------|--------------|
+| Quantization | float32, float16, int8, int4 NF4, GPTQ, AWQ | Does int4 beat float16 on GPU? |
+| Pruning | Sparsity 10%, 30%, 50%, 70% | Where does quality collapse? |
+| Distillation | Proper training 1000+ steps on WikiText | How close can student get? |
+| Runtime | ONNX, TensorRT, torch.compile() | Which runtime wins on T4? |
+| Flash Attention | FA on vs off × sequence length | Does ITL stay flat at 1000 tokens? |
+| Serving | Batch size 1, 2, 4, 8, 16, 32 | What is the throughput sweet spot? |
+| Context Length | Prompt 32 to 1024 tokens | Does TTFT scale quadratically? |
+| KV Cache | Generate up to 1000 tokens | When does memory pressure hit? |
