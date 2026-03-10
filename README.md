@@ -5,6 +5,8 @@
 > on a GPU environment. Every result is backed by profiler traces and explained
 > from hardware level, not just reported
 
+![Architecture Overview](docs/images/inference-flow-bg.png)
+
 **Author:** Adin Ramdan Farelino  
 **Hardware:** GCP T4 GPU (16GB VRAM)    
 **Model:** TinyLLama/TinyLlama-1.1B-Chat-v1.0  
