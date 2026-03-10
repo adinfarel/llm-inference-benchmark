@@ -24,3 +24,37 @@ techniques behave very differently depending on the hardware they run on. int4 q
 on CPU - not because of a bug, but because CPU has no native integer arithmetic. The model had to dequantize weights back to float32 before every computation, making the overhead larger than the memory saving
 
 That exploration raised 7 questions that could not be answered on CPU alone. This project exists to answer all of them - on a GPU where these techniques were actually designed to run.
+
+## Research Questions
+
+This project is built around 7 questions that emerged from the CPU exploration and could not be answered without a proper GPU environment.
+
+**Q1 - Does int4 quantization actually speed up inference on GPU?**
+On CPU, int4 was 7x slower than float32 due to dequantization overhead. On GPU with Tensor Core native integer arithmetic, the expectation flips. This project measures whether that theoretical advantage holds in practice
+
+**Q2 - Between GPTQ, AWQ, and NF4 - which int4 method wins on quality?**
+GPTQ uses Hessian-based error compensation per column. AWQ protects salient weights before quantizing. NF4 uses normally distributed quantization points. All three target int4 but with fundamentally different approaches. Which one preserves perplexity best on TinyLlama?
+
+**Q3 - Does Flash Attention actually flatten ITL at long sequences?**
+Standard attention has O(n*n) memory complexity - every token attends to every other token, and intermediate results must pass through HBM repeatedly. Flash Attention tiles the computation to stay in SRAM. This project measures whether ITL stays flat from token 1 to token 1000, or starts degrading.
+
+**Q4 - At which token position does KV cache pressure become visible?**
+KV cache grows every generated token. At same point, the cache size starts pressuring GPU memory and ITL begins to rise. This project maps the inflection point by measuring ITL per token position across 1000 tokens.
+
+**Q5 — What is the optimal batch size for throughput on a T4?**  
+Batch size 1 underutilizes GPU parallelism. Too large a batch causes
+memory pressure. There is a sweet spot where throughput peaks before
+latency per request becomes unacceptable. This project finds that point
+across batch sizes 1, 2, 4, 8, 16, and 32.
+
+**Q6 — Does prompt length affect TTFT in a way consistent with O(n²) complexity?**  
+Prefill — processing the input prompt before generating the first token —
+is quadratic in sequence length for standard attention. This project measures
+TTFT across prompt lengths 32 to 1024 tokens and tests whether Flash Attention
+changes that scaling behavior.
+
+**Q7 — With proper training, how much of the distillation quality gap closes?**  
+The CPU exploration used only 50 training steps — student perplexity was 18,846
+versus teacher perplexity of 7.87. That was underfitting, not a failure of
+distillation. With 1000+ steps on WikiText, this project measures how close
+the student can get while keeping its 35x speed advantage.
