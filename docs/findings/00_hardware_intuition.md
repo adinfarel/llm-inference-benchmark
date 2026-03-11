@@ -17,7 +17,7 @@ SRAM        ~20 cycles      ~48-192KB per SM  Shared within 1 SM
 HBM         ~200 cycles     16-80GB         Global, all SMs
 ```
 
-![Memory Hierarchy Pyramid](../images/memory_hierarchy.png)
+![Memory Hierarchy Pyramid](../images/hbm-sram-registry.png)
 
 ### Why three levels exist
 
