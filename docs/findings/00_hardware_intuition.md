@@ -17,6 +17,8 @@ SRAM        ~20 cycles      ~48-192KB per SM  Shared within 1 SM
 HBM         ~200 cycles     16-80GB         Global, all SMs
 ```
 
+![Memory Hierarchy Pyramid](../images/memory_hierarchy.png)
+
 ### Why three levels exist
 
 Imagine if everything lived in registers - registers are the fastest memory, so why not put
