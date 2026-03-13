@@ -32,8 +32,11 @@ This project is built around 7 questions that emerged from the CPU exploration a
 **Q1 - Does int4 quantization actually speed up inference on GPU?**
 On CPU, int4 was 7x slower than float32 due to dequantization overhead. On GPU with Tensor Core native integer arithmetic, the expectation flips. This project measures whether that theoretical advantage holds in practice
 
-**Q2 - Between GPTQ, AWQ, and NF4 - which int4 method wins on quality?**
-GPTQ uses Hessian-based error compensation per column. AWQ protects salient weights before quantizing. NF4 uses normally distributed quantization points. All three target int4 but with fundamentally different approaches. Which one preserves perplexity best on TinyLlama?
+**Q2 - Between AWQ vs NF4 - which int4 technique preserves perplexity best?**
+Both compress weights to 4-bit but with fundamentally different strategies.
+NF4 optimizes quantization points for normal weight distributions.
+AWQ protects salient weights based on activation magnitude before quantizing.
+This project measures which approach preserves perplexity better on TinyLlama.
 
 **Q3 - Does Flash Attention actually flatten ITL at long sequences?**
 Standard attention has O(n*n) memory complexity - every token attends to every other token, and intermediate results must pass through HBM repeatedly. Flash Attention tiles the computation to stay in SRAM. This project measures whether ITL stays flat from token 1 to token 1000, or starts degrading.
@@ -58,6 +61,12 @@ The CPU exploration used only 50 training steps — student perplexity was 18,84
 versus teacher perplexity of 7.87. That was underfitting, not a failure of
 distillation. With 1000+ steps on WikiText, this project measures how close
 the student can get while keeping its 35x speed advantage.
+
+**Q8 - Does torch.compile reduce dispatch overhead and improve throughput?**
+PyTorch dynamic graph dispatches ~220 kernel launches per token, each with
+fixed overhead regardless of computation size. torch.compile fuses operations
+and reduces kernel launches at compile time. This project measures whether
+that translates to measurable throughput improvement over float16 baseline.
 
 ## Environment
 
@@ -88,7 +97,7 @@ not just averages — because production SLAs are defined at p99, not mean.
 
 | Section | Techniques | Key Question |
 |---------|------------|--------------|
-| Quantization | float32, float16, int8, int4 NF4, GPTQ, AWQ | Does int4 beat float16 on GPU? |
+| Quantization | float32, float16, int8, int4 NF4, compiled, AWQ | Does int4 beat float16 on GPU? |
 | Pruning | Sparsity 10%, 30%, 50%, 70% | Where does quality collapse? |
 | Distillation | Proper training 1000+ steps on WikiText | How close can student get? |
 | Runtime | ONNX, TensorRT, torch.compile() | Which runtime wins on T4? |

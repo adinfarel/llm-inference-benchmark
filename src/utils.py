@@ -133,6 +133,15 @@ def load_model_and_tokenizer(
             awq_cfg["model_name"],
             cache_dir=cache_dir,
         )
+    
+    elif technique == "compiled":
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            dtype=torch.float16,
+            device_map=device,
+            cache_dir=cache_dir
+        )
+        model = torch.compile(model, mode="reduce-overhead")
 
     else:
         raise ValueError(

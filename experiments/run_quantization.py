@@ -38,8 +38,8 @@ TECHNIQUES = [
     "float16",
     "int8",
     "int4",
-    "gptq",
     "awq",
+    "compiled"
 ]
 
 def run_quantization(

@@ -12,7 +12,7 @@ prompt:
 
 # Core benchmark settings
 benchmark:
-  max_new_token: 100
+  max_new_tokens: 100
   n_runs: 3
   warmup_runs: 1
   do_sample: false
