@@ -15,7 +15,7 @@ auto-gptq==0.7.1
 autoawq==0.2.4
 
 # ONNX runtime
-onnx=1.15.0
+onnx==1.15.0
 onnxruntime-gpu==1.17.0
 optimum[onnxruntime-gpu]==1.17.1
 
