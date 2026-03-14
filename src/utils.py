@@ -30,7 +30,7 @@ def load_model_and_tokenizer(
     Loads TinyLlama with the specified optimization technique.
     Each technique requires different loading configuration —
     this function centralizes all loading logic so experiment
-    scripts only need to call one function with a technique name.
+    scripts only need tfo call one function with a technique name.
 
     Supported techniques:
         float32  — baseline, no optimization
@@ -141,7 +141,7 @@ def load_model_and_tokenizer(
             device_map=device,
             cache_dir=cache_dir
         )
-        model = torch.compile(model, mode="reduce-overhead")
+        model = torch.compile(model, mode="default")
 
     else:
         raise ValueError(
