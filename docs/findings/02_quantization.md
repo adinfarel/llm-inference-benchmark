@@ -913,7 +913,7 @@ To answer this, we must look at the PyTorch Profiler Chrome traces. Hardware doe
 **Observation:** `float16` has a faster TTFT than `float32` (41.3ms vs 63.7ms), but its decode/ITL is actually slower (35.6ms vs 26.2ms).
 **Profiler Evidence:** The trace shows multiple `_type_as` and `cast` kernels executing between the main computation blocks during the decode phase.
 
-![float16 Type Casting Profiler Trace](../images/traces/float16_traces.jpg)
+![float16 Type Casting Profiler Trace](../images/traces/float16_traces.png)
 
 **Hardware Insight:** While `float16` saves memory bandwidth during the prefill phase (TTFT), it introduces overhead during the decode phase. Certain operations (like Softmax or LayerNorm) require higher precision to prevent numerical overflow, forcing PyTorch to dynamically upcast tensors from `float16` to `float32`, compute, and downcast back. At batch size 1, where the GPU is largely starved for work, the latency of repeatedly launching these type-casting kernels outweighs the compute savings of half-precision math.
 
@@ -921,6 +921,6 @@ To answer this, we must look at the PyTorch Profiler Chrome traces. Hardware doe
 **Observation:** The `compiled` technique has a competitive p50 ITL (17.8ms) but an astronomical standard deviation (962ms) and a massive p99 spike.
 **Profiler Evidence:** Zooming out on the timeline reveals a massive gap (nearly 1.5 seconds) where the GPU stream is completely idle, while the CPU thread is maxed out running `TorchInductor` compilation steps.
 
-![torch.compile Recompilation Gap](../images/traces/compiled_traces.jpg)
+![torch.compile Recompilation Gap](../images/traces/compiled_traces.png)
 
 **Hardware Insight:** `torch.compile` works by fusing operations into optimized CUDA graphs. However, during text generation, the KV Cache grows by one token at every step. Because the tensor shape changes dynamically, the PyTorch compiler assumes the previous execution graph is invalid. It halts GPU execution and forces the CPU to recompile the entire graph from scratch for the new shape. The GPU sits completely idle during this recompilation, creating massive latency spikes that destroy the average throughput.
