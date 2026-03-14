@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 import torch
+import torch.nn.utils.prune as prune
+import torch.nn as nn
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -24,7 +26,9 @@ def get_gpu_memory_usage() -> Optional[float]:
 def load_model_and_tokenizer(
     model_name: Optional[str] = None,
     technique: str = "float32",
-    device: Optional[str] = None
+    device: Optional[str] = None,
+    sparsity_level: int = 0.0,
+    target_modules: Optional[list] = None
 ) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
     """
     Loads TinyLlama with the specified optimization technique.
@@ -39,11 +43,14 @@ def load_model_and_tokenizer(
         int4     — NF4 quantization via bitsandbytes
         gptq     — pre-quantized GPTQ from TheBloke
         awq      — pre-quantized AWQ from TheBloke
+        pruning  — prune weight at model
 
     Args:
         model_name: HuggingFace model name. Defaults to config value.
         technique: Optimization technique to apply.
         device: Target device. Defaults to CUDA if available.
+        sparsity_level: How large threshold when pruning
+        target_modules: Target pruning is weight, usually attention q_proj, k_proj, v_proj, o_proj ('weight')
     
     Returns:
         Tuple of (model, tokenizer).
@@ -148,6 +155,27 @@ def load_model_and_tokenizer(
             f"Unknown technique: {technique}. "
             f"Supported: float32, float16, int8, int4, gptq, awq"
         )
+    
+    if sparsity_level > 0.0:
+        if target_modules is None:
+            # Fallback response if target_modules is None
+            target_modules = ['q_proj', 'k_proj', 'v_proj', 'o_proj']
+        
+        print(f"    Applying l1_unstructured pruning at {sparsity_level*100:.2f}% sparsity...")
+        pruned_layers_count = 0
+        
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear) and any(target in name for target in target_modules):
+                
+                # Apply pruning mask
+                prune.l1_unstructured(module, name='weight', amount=sparsity_level)
+                
+                # Remove permanent dynamic mask overhead
+                prune.remove(module, 'weight')
+                
+                pruned_layers_count += 1
+        
+        print(f"    Pruning baked into {pruned_layers_count} linear layers.")
 
     model.eval()
 
