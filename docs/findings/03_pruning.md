@@ -121,6 +121,10 @@ Our Experiment (T4):
 ## 4. Quality Collapse: The Limits of the Network
 
 Since we proved that unstructured pruning gives us no latency or memory benefits on T4, we evaluate it strictly on how it degrades model intelligence.
+
+![Efficiency vs Degradation Trade-off](../../results/figures/pruning/tradeoff_scatter.png)      
+*Figure 4: The trade-off between throughput and perplexity. An ideal optimization would move up and to the left. Unstructured pruning simply moves to the right (brain damage) without moving up (speed).*
+
 ```
     1. 10% Sparsity (Perplexity 7.83):
        Almost identical to the 7.81 baseline. The model easily absorbs the loss of the bottom 10% of weights. These were truly "dead" connections.
@@ -134,7 +138,7 @@ Since we proved that unstructured pruning gives us no latency or memory benefits
 
 ## 5. Conclusion & Engineering Decision
  
-> Should we use unstructured pruning on older GPUs like T4?
+> **Should we use unstructured pruning on older GPUs like T4?**
 
 **Absolutely not.** Our benchmark proves that without hardware-level support for structured sparsity (Ampere architecture or newer), pruning only destroys model quality (Perplexity 7.8 → 11.8 at 50%) while providing zero benefits to inference speed or memory footprint.
 
