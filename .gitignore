@@ -13,7 +13,6 @@ __pycache__/
 results/metrics/*.csv
 results/metrics/*.json
 results/traces/
-results/figures/
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
