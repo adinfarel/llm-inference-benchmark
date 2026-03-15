@@ -89,17 +89,22 @@ pruned_70pct    26.1 tps     3588MB   246.604
 **Hardware Insight:**   
 PyTorch stores these matrices in a dense float16 format. To the hardware, 0.0 is just another 16-bit floating-point number. It takes up the exact same 2 bytes of VRAM as 3.1415. Because we used unstructured pruning, the zeros are scattered randomly. The memory allocator cannot compress the tensor.
 
-### The Throughput Ceiling
+### The Throughput Ceiling & Generation Stability
 
 **Observation:** Throughput hovers around 26-27 TPS for 30%, 50%, and 70% sparsity. This is practically identical to the unpruned float16 baseline.
+
+![ITL Stability Over Sequence](../../results/figures/pruning/itl_stability.png) 
+*Figure 2: Token generation latency over time (excluding initial compilation spikes).*
+
+![Token Generation Jitter](../../results/figures/pruning/stutter_boxplot.png)   
+*Figure 3: Distribution of ITL showing jitter and outlier spikes (stutter) during generation.*
 
 **Hardware Insight:**   
 The NVIDIA T4 GPU uses the Turing architecture. Turing Tensor Cores are designed strictly for dense matrix multiplication. When the Tensor Core receives a matrix that is 50% zeros, it does not magically skip the calculations. It faithfully executes 0.0 * input = 0.0.
 The GPU spends the exact same amount of clock cycles computing zeros as it does computing actual weights.
 
-> When does Pruning actually improve speed?
-
-To get latency benefits from zeros, you need specialized hardware that can skip the computation physically at the silicon level. Newer architectures (like Ampere on the A100 or A10G) introduced Sparse Tensor Cores supporting 2:4 Structured Sparsity.
+> **When does Pruning actually improve speed?**
+> To get latency benefits from zeros, you need specialized hardware that can skip the computation physically at the silicon level. Newer architectures (like Ampere on the A100 or A10G) introduced Sparse Tensor Cores supporting **2:4 Structured Sparsity**.
 ```
 2:4 Structured Sparsity (Ampere+):
     For every 4 values in a memory block, exactly 2 must be zero.
