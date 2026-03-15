@@ -81,6 +81,7 @@ pruned_70pct    26.1 tps     3588MB   246.604
 ### The VRAM Illusion
 
 ![Peak GPU Memory Footprint](../../results/figures/pruning/memory_footprint.png)
+
 *Figure 1: Memory footprint across different sparsity levels. Notice the absolute lack of variance.*
 
 **Observation:** Memory footprint is completely locked at ~3588 MB regardless of sparsity. 70% of the weights are zero, yet memory usage did not drop by a single megabyte.
