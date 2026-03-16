@@ -187,12 +187,12 @@ Full analysis → `docs/04_distillation.md`
 Key findings are updated as research questions are answered.
 Full hardware-level explanation for each finding is in the linked docs.
 
-**Q1 — Int4 quantization speed-up inference on GPU?** — *pending*
-**Q2 — Between nf4 vs AWQ, which the best?** — *pending*
-**Q3 — Flash Attention ITL flattening** — *pending*  
-**Q4 — KV cache pressure inflection point** — *pending*  
-**Q5 — Optimal batch size on T4** — *pending*  
-**Q6 — TTFT scaling with prompt length** — *pending*  
+**Q1 — Int4 quantization speed-up inference on GPU?** — *pending*   
+**Q2 — Between nf4 vs AWQ, which the best?** — *pending*    
+**Q3 — Flash Attention ITL flattening** — *pending*     
+**Q4 — KV cache pressure inflection point** — *pending*      
+**Q5 — Optimal batch size on T4** — *pending*   
+**Q6 — TTFT scaling with prompt length** — *pending*    
 
 **Q7 — Production cost of distillation**  
 Student (1.1B) is 2.23x faster at TTFT and uses 2.6x less VRAM than teacher (3B).
