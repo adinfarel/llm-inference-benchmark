@@ -63,7 +63,7 @@ def load_model_with_attn(
 
 def build_prompt_of_length(
     tokenizer: AutoTokenizer,
-    target_length: str,
+    target_length: int,
 ) -> str:
     """
     Constructs a prompt that tokenizes to approximately target_length tokens.
