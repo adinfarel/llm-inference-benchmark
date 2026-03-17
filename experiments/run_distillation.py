@@ -1,5 +1,6 @@
 """
-Distillation Inference Benchmark.
+Distillation Benchmark — experiments/run_distillation.py.
+
 Compares a larger Teacher model against its officially distilled Student model.
 This measures the practical production trade-offs: TPS vs VRAM vs Perplexity.
 """
