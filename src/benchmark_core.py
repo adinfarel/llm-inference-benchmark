@@ -417,9 +417,8 @@ def generate_measure(
     stabilize_environment()
     
     # warmup run - not measured, just to prime GPU kernel cache
-    warmup_prompt = format_prompt(prompt_cfg['user'])
     input_ids = tokenizer(
-        warmup_prompt,
+        prompt,
         return_tensors="pt"
     ).input_ids.to(DEVICE)
     

@@ -38,7 +38,7 @@ NF4 optimizes quantization points for normal weight distributions.
 AWQ protects salient weights based on activation magnitude before quantizing.
 This project measures which approach preserves perplexity better on TinyLlama.
 
-**Q3 - Does Flash Attention actually flatten ITL at long sequences?**
+**Q3 - Does Flash Attention actually flatten ITL at long sequences on T4?**
 Standard attention has O(n*n) memory complexity - every token attends to every other token, and intermediate results must pass through HBM repeatedly. Flash Attention tiles the computation to stay in SRAM. This project measures whether ITL stays flat from token 1 to token 1000, or starts degrading.
 
 **Q4 - At which token position does KV cache pressure become visible?**
@@ -70,9 +70,8 @@ that translates to measurable throughput improvement over float16 baseline.
 | Component | Details |
 |-----------|---------|
 | Cloud | Google Cloud Platform |
-| Instance | n1-standard-4 + NVIDIA T4 GPU |
 | VRAM | 16GB GDDR6 |
-| CUDA | 12.1 |
+| CUDA | 12.8 |
 | Python | 3.10 |
 | PyTorch | 2.1.0+cu121 |
 | Transformers | 4.38.0 |
@@ -182,6 +181,21 @@ Full analysis → `docs/02_pruning.md`
 *Teacher perplexity not directly comparable — domain mismatch. See `docs/04_distillation.md`.*  
 Full analysis → `docs/04_distillation.md`
 
+### Flash Attention
+
+| label | prompt_length | ttft_p50_ms | itl_p50_ms | itl_p99_ms | throughput_tps | peak_memory_mb |
+|----------------------|---------------|-------------|------------|------------|----------------|----------------|
+| standard_len(128) | 128 | 45.5 | 28.0 | 49.1 | 34.2 | 2118 |
+| standard_len(256) | 256 | 69.2 | 34.0 | 60.6 | 26.1 | 2136 |
+| standard_len(512) | 512 | 110.7 | 34.3 | 68.4 | 27.1 | 2196 |
+| standard_len(1024) | 1024 | 251.0 | 34.5 | 64.1 | 24.7 | 2411 |
+| flash_attn_len(128) | 128 | 49.5 | 34.3 | 61.1 | 26.6 | 2121 |
+| flash_attn_len(256) | 256 | 68.3 | 34.8 | 64.0 | 25.8 | 2146 |
+| flash_attn_len(512) | 512 | 138.2 | 35.0 | 66.2 | 25.2 | 2219 |
+| flash_attn_len(1024) | 1024 | 350.7 | 34.4 | 73.7 | 24.6 | 2471 |
+
+Full analysis → `docs/05_flash_attention.md`
+
 ## Findings
 
 Key findings are updated as research questions are answered.
@@ -189,10 +203,23 @@ Full hardware-level explanation for each finding is in the linked docs.
 
 **Q1 — Int4 quantization speed-up inference on GPU?** — *pending*   
 **Q2 — Between nf4 vs AWQ, which the best?** — *pending*    
-**Q3 — Flash Attention ITL flattening** — *pending*     
+**Q3 — Flash Attention ITL flattening on T4**
+ITL flattening not observed. itl_p50 identical between standard and
+flash_attn at 1024 tokens (34.5ms vs 34.4ms). Flash Attention via SDPA
+is 40% slower at TTFT for 1024 token prompts (350.7ms vs 251.0ms).
+Root cause: T4 Turing lacks asynchronous memory copy units that Flash
+Attention tiling relies on. SDPA dispatcher overhead outweighs HBM
+traffic reduction on this architecture. Expected to differ on Ampere.
+Full breakdown → `docs/05_flash_attention.md`
+
 **Q4 — KV cache pressure inflection point** — *pending*      
 **Q5 — Optimal batch size on T4** — *pending*   
-**Q6 — TTFT scaling with prompt length** — *pending*    
+**Q6 — TTFT scaling with prompt length**
+Standard attention TTFT scales consistently with prompt length —
+45.5ms at 128 tokens to 251.0ms at 1024 tokens — confirming memory
+bandwidth bottleneck at prefill phase. Not perfectly quadratic because
+prefill includes linear-scaling operations alongside quadratic attention.
+Full breakdown → `docs/05_flash_attention.md`    
 
 **Q7 — Production cost of distillation**  
 Student (1.1B) is 2.23x faster at TTFT and uses 2.6x less VRAM than teacher (3B).
@@ -232,3 +259,22 @@ at production scale. Serving experiment (Q5) will address this directly.
 T4 has no Sparse Tensor Core support. Unstructured zeros are computed
 identically to non-zero weights — no speed or memory benefit observed.
 Structured 2:4 sparsity requires Ampere architecture (A100, A10G) or newer.
+
+**Flash Attention benefit not observable on T4 Turing architecture**
+T4 lacks asynchronous memory copy units that Flash Attention tiling
+relies on for maximum benefit. SDPA dispatcher overhead on PyTorch 2.10
+outweighs HBM traffic reduction at all tested sequence lengths.
+Flash Attention ITL flattening is expected on Ampere (A100, A10G) or newer.
+Planned for GCP Phase 2.
+
+**SDPA used instead of flash_attention_2 package**
+flash_attention_2 requires source compilation — no pre-built wheels for
+CUDA 12.8. SDPA implements the same algorithm but adds dispatcher overhead
+on Turing architecture. Results may differ with flash_attention_2 on
+compatible CUDA version.
+
+**Periodic recompilation spikes every ~100 tokens**
+Both standard and SDPA show ITL spikes at token position ~100 and ~200.
+Root cause: KV cache tensor shape change triggers PyTorch dynamic graph
+recompilation. Not memory pressure — recompilation overhead.
+Fix: torch.compile with dynamic=True. Planned for GCP re-run.

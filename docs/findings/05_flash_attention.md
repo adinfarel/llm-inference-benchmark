@@ -232,3 +232,130 @@ The connection:
 ```
 
 ## 7. Production Benchmark Results
+
+### 7.1 Summary Table
+
+| label | prompt_length | ttft_p50_ms | itl_p50_ms | itl_p99_ms | itl_std_ms | throughput_tps | peak_memory_mb |
+|----------------------|---------------|-------------|------------|------------|------------|----------------|----------------|
+| standard_len(128) | 128 | 45.5 | 28.0 | 49.1 | — | 34.2 | 2118 |
+| standard_len(256) | 256 | 69.2 | 34.0 | 60.6 | — | 26.1 | 2136 |
+| standard_len(512) | 512 | 110.7 | 34.3 | 68.4 | — | 27.1 | 2196 |
+| standard_len(1024) | 1024 | 251.0 | 34.5 | 64.1 | 22.0 | 24.7 | 2411 |
+| flash_attn_len(128) | 128 | 49.5 | 34.3 | 61.1 | — | 26.6 | 2121 |
+| flash_attn_len(256) | 256 | 68.3 | 34.8 | 64.0 | — | 25.8 | 2146 |
+| flash_attn_len(512) | 512 | 138.2 | 35.0 | 66.2 | — | 25.2 | 2219 |
+| flash_attn_len(1024) | 1024 | 350.7 | 34.4 | 73.7 | 31.8 | 24.6 | 2471 |
+
+### 7.2 TTFT Scaling — Standard Attention Confirms O(N²), Flash Attention Does Not Improve It
+
+![TTFT vs Sequence Length](../../results/figures/flash_attention/ttft_vs_sequence_length.png)   
+*Figure 1: TTFT shows how fast the compute attention is at the beginning*
+
+![Throughput vs Sequence Length](../../results/figures/flash_attention/throughput_vs_sequence_length.png)   
+*Figure 2: Total token generate every second, higher is better*
+
+Standard attention TTFT scales predictably with prompt length:
+```
+standard_len(128):    45.5ms
+standard_len(256):    69.2ms   ← ~1.5x of 128, not 4x
+standard_len(512):   110.7ms   ← ~2.4x of 128
+standard_len(1024):  251.0ms   ← ~5.5x of 128
+```
+
+This scaling isn't perfectly quadratic because TTFT isn't a pure attention computation — it includes embedding lookup, layer norm, MLP forward pass, and memory allocation overhead, all of which scale linearly. The attention component is quadratic, but attention isn't the only operation in prefill.
+
+Flash Attention TTFT is slower than standard at all sequence lengths:
+```
+128 tokens:   standard 45.5ms  vs  flash_attn 49.5ms   ← FA 9% slower
+256 tokens:   standard 69.2ms  vs  flash_attn 68.3ms   ← almost the same
+512 tokens:   standard 110.7ms vs  flash_attn 138.2ms  ← FA 25% slower
+1024 tokens:  standard 251.0ms vs  flash_attn 350.7ms  ← FA 40% slower
+```
+
+This is the opposite of theoretical expectations. Flash Attention should be faster in prefill due to O(N) HBM traffic versus O(N²). The situation at T4 is different — SDPA dispatcher overhead dominates the prefill phase and outweighs the tiling benefit.
+
+### 7.3 ITL — Decode Phase: Flash Attention Doesn't giving Benefit on T4 GPU
+
+![ITL Stability Comparison](../../results/figures/flash_attention/itl_stability_comparison.png) 
+*Figure 3: Distribution of prompt length, how fast to generate per token over time (MS)*
+
+ITL decode phase is nearly identical between standard and flash attention at all sequence lengths:
+```
+standard_len(1024):   itl_p50 = 34.5ms,  itl_p99 = 64.1ms,  itl_std = 22.0ms
+flash_attn_len(1024): itl_p50 = 34.4ms,  itl_p99 = 73.7ms,  itl_std = 31.8ms
+```
+
+Flash Attention doesn't flatten ITL — p50 is identical and p99 flash_attn is actually higher. ITL std flash_attn (31.8ms) is higher than standard (22.0ms), meaning flash_attn is more unstable in the decode phase.
+
+### 7.4 ITL Per Position — Periodic Recompilation Spikes
+
+![ITL Per Position](../../results/figures/flash_attention/itl_per_position_1024.png)
+*Figure 4: Line chart ITL per position to see spike occur at where position*
+
+ITL per-position data from JSON reveals something not visible from aggregation alone. Both configurations have periodic spikes every ~100 token positions:
+```
+standard_len(1024) spike positions:
+    position 0: 258ms ← first token, warmup spike
+    position 97: 243ms ← periodic spike
+    position 197: 238ms ← periodic spike
+    rest: 32–65ms
+
+flash_attn_len(1024) spike positions:
+    position 0: 356ms ← first token, greater than standard
+    position 99: 344ms ← periodic spike
+    position 197: 348ms ← periodic spike
+    rest: 33–70ms
+```
+
+This 100-token spike pattern is KV cache shape recompilation—every 100 tokens, the tensor shape changes enough to trigger PyTorch to recompile the execution graph. Flash Attention spikes are actually larger than standard because the SDPA dispatcher adds overhead on top of the recompilation cost.
+```
+Spike magnitude comparison at ~position 100:
+    standard: 243ms
+    flash_attn: 344ms
+
+Flash Attention recompilation overhead = 41% greater.
+```
+
+### 7.5 Why Flash Attention Underperforms on T4 — The Architecture Mismatch
+
+There are three interrelated reasons why Flash Attention via SDPA does not provide the expected benefit at T4:
+```
+Reason 1 — T4 is a Turing architecture (2018):
+
+    Flash Attention is most optimized in Ampere (A100, A10G) and above.
+    Ampere has:
+        Asynchronous memory copy units — overlapping data loading with compute
+        Larger L2 cache — reducing HBM pressure more effectively
+        Better warp scheduler for fused kernels
+
+    T4 Turing does not have asynchronous copy units.
+    The tiling benefit of Flash Attention largely depends
+    on asynchronous prefetching — without it,
+    the GPU still has to wait for data before compute can begin.
+    HBM round trip reduction is present, but waiting behavior remains unchanged.
+
+Reason 2 — SDPA dispatcher overhead in PyTorch 2.10:
+
+    The flash_attention_2 package (Dao-AILab) has a dedicated CUDA kernel
+    compiled and optimized for T4 Turing specifically.
+
+    SDPA in PyTorch is a unified dispatcher that supports:
+        flash_attention path
+        efficient_attention path (xformers)
+        math path (standard fallback)
+
+    In T4 + PyTorch 2.10, SDPA performs runtime checks
+    to determine the dispatch path. The overhead of the dispatch logic
+    is visible in the TTFT — particularly in the prefill phase,
+    which is executed once per request.
+
+Reason 3 — Prefill vs. decode behavior differs:
+
+    Flash Attention benefits are greatest in the decode phase,
+    when sequence length grows and the KV cache grows.
+    In prefill, the entire input is processed simultaneously in a single forward pass — the tiling benefit is present but smaller,
+    because there is no incremental KV cache growth.
+
+    T4 with SDPA overhead actually makes prefill slower
+    than standard attention because overhead > benefit.
+```
