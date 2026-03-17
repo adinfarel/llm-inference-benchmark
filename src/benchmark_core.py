@@ -374,7 +374,8 @@ def generate_measure(
     label: str = "experiment",
     measure_perplexity_score: bool = True,
     is_onnx: bool = False,
-    enable_profiler: bool = False
+    enable_profiler: bool = False,
+    custom_prompt: Optional[str] = None
 ) -> dict:
     """
     Runs the full benchmark pipeline for a single model configuration.
@@ -409,7 +410,7 @@ def generate_measure(
     prompt_cfg = config['prompt']
     results_cfg = config['results']
     
-    prompt = format_prompt(prompt_cfg['user'])
+    prompt = custom_prompt if custom_prompt is not None else format_prompt(prompt_cfg['user'])
     n_runs = cfg['n_runs']
     max_new_tokens = cfg['max_new_tokens']
     

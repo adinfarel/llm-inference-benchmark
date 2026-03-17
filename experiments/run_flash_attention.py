@@ -116,7 +116,7 @@ def run_flash_attention(
     all_results = []
     configurations = [
         ("standard", "eager"),
-        ("flash_attn", "flash_attention_2"),
+        ("flash_attn", "sdpa"),
     ]
     total = len(prompt_lengths) * len(configurations)
     counter = 0
@@ -142,6 +142,7 @@ def run_flash_attention(
                 label=label,
                 enable_profiler=enable_profiler,
                 measure_perplexity_score=False,
+                custom_prompt=prompt
             )
             
             result['prompt_length'] = actual_len
