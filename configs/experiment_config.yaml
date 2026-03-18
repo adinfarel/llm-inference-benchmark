@@ -95,6 +95,10 @@ profiler:
   profile_memory: true
   with_stack: true
 
+# ONNX
+onnx:
+  export_path: "./model_cache/tinyllama_onnx"
+
 # Results output
 results:
   base_dir: "./results"
