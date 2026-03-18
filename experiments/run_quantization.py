@@ -38,7 +38,6 @@ TECHNIQUES = [
     "float16",
     "int8",
     "int4",
-    "awq",
     "compiled"
 ]
 
