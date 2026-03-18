@@ -90,9 +90,9 @@ def run_kv_cache(
             save_results(result)
         
         all_results.append(result)
-        unload_model(result)
+        unload_model(model)
     
-    summarize_results(result)
+    summarize_results(all_results)
     return all_results
 
 if __name__ == "__main__":

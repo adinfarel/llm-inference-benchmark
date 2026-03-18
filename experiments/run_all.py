@@ -35,15 +35,6 @@ from experiments.run_onnx            import run_onnx
 import gc
 import torch
 
-def run_all(save: bool = True) -> None:
-    """
-    Runs all experiments sequentially with cleanup between each.
-
-    Args:
-        save: If True, persists all results to disk.
-              Default True — run_all is intended for full benchmark runs.
-    """
-
 def cleanup():
     """
     Clears GPU memory and Python garbage between experiments.

@@ -62,7 +62,7 @@ def export_to_onnx(
     Returns:
         Path to exported ONNX model directory.
     """
-    from onnx.onnxruntime import ORTModelForCausalLM
+    from optimum.onnxruntime import ORTModelForCausalLM
     
     export_dir = Path(export_path)
     

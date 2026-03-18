@@ -69,7 +69,7 @@ def build_prompt_of_length(
     return prompt
 
 def run_context_length(
-    prompt_lenghts: list = None,
+    prompt_lengths: list = None,
     save: bool = False,
 ) -> list:
     """
@@ -85,8 +85,8 @@ def run_context_length(
     Returns:
         List of result dicts, one per prompt length.
     """
-    if prompt_lenghts is None:
-        prompt_lenghts = PROMPT_LENGTHS
+    if prompt_lengths is None:
+        prompt_lengths = PROMPT_LENGTHS
     
     all_results = []
     total       = len(prompt_lenghts)

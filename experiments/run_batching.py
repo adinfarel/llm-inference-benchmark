@@ -161,7 +161,7 @@ def run_batching(
         model.config.pad_token_id = model.config.eos_token_id
     
     for idx, batch_size in enumerate(batch_sizes, start=1):
-        label   = f"batch_size_{batch_sizes}"
+        label   = f"batch_size_{batch_size}"
         print_experiment_header(label, idx, total)
         
         try:
