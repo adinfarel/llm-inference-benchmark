@@ -59,52 +59,19 @@ def measure_ttft(
     tokenizer: AutoTokenizer,
     prompt: str,
     warmup: bool = True,
-    is_onnx: bool = False
 ) -> float:
-    """
-    Measures Time to First Token (TTFT) in milliseconds.
-    TTFT captures the prefill phase — how long the model takes
-    to process the entire input prompt and produce the first output token.
-    This is memory bandwidth bound: longer prompts = higher TTFT
-    because more data must be loaded from HBM before compute begins.
-
-    Args:
-        model: The loaded model to benchmark.
-        tokenizer: Corresponding tokenizer.
-        prompt: Already formatted prompt string.
-        warmup: If True, runs one warmup pass before measuring.
-                GPU kernels are cached after first run,
-                so warmup ensures we measure steady-state performance.
-        is_onnx: To validate whether ORT or not.
-
-    Returns:
-        TTFT in milliseconds.
-    """
-    input_ids = tokenizer(
-        prompt,
-        return_tensors="pt"
-    ).input_ids.to(DEVICE)
     
+    input_ids      = tokenizer(prompt, return_tensors="pt").input_ids.to(DEVICE)
     attention_mask = torch.ones_like(input_ids)
     
     if warmup:
         with torch.no_grad():
-            if is_onnx:
-                _ = model.run(
-                    ['logits'], 
-                    {
-                        "input_ids": input_ids.cpu().numpy(),
-                        "attention_mask": torch.ones_like(input_ids).cpu().numpy()
-                    }
-                )
-            else:
-                _ = model.generate(
-                    input_ids,
-                    attention_mask=attention_mask,
-                    max_new_tokens=1,
-                    do_sample=False
-                )
-        
+            _ = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=1,
+                do_sample=False
+            )
         if torch.cuda.is_available():
             torch.cuda.synchronize()
     
@@ -114,28 +81,19 @@ def measure_ttft(
     t_start = time.perf_counter()
     
     with torch.no_grad():
-        if is_onnx:
-            _ = model.run(
-                ['logits'],
-                {
-                    "input_ids": input_ids.cpu().numpy(),
-                    "attention_mask": torch.ones_like(input_ids).cpu().numpy()
-                }
-            )
-        else:
-            _ = model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                max_new_tokens=1,
-                do_sample=False
-            )
+        _ = model.generate(
+            input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=1,
+            do_sample=False
+        )
             
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     
     t_end = time.perf_counter()
-    
-    return (t_end - t_start) * 1000 # MS
+    return (t_end - t_start) * 1000
+
 
 def measure_itl_and_tpot(
     model: AutoModelForCausalLM,
@@ -143,52 +101,20 @@ def measure_itl_and_tpot(
     prompt: str,
     max_new_tokens: Optional[int] = None,
     force_max_tokens: bool = True,
-    is_onnx: bool = False
 ) -> Tuple[List[float], float, int]:
-    """
-    Measures Inter-Token Latency (ITL) for each generated token
-    and computes Time Per Output Token (TPOT) as the mean ITL.
-
-    ITL is measured per token position, not just as an average.
-    This per-position granularity is what allows us to observe
-    KV cache pressure — ITL should rise as the cache grows larger
-    because each decode step must attend over more tokens in HBM.
-
-    TPOT is the mean of all ITL values and represents the average
-    decode speed — this is what most papers report, but it hides
-    the per-position behavior that ITL captures.
-
-    Args:
-        model: The loaded model to benchmark.
-        tokenizer: Corresponding tokenizer.
-        prompt: Already formatted prompt string.
-        max_new_tokens: Number of tokens to generate.
-                        Defaults to config value.
-        force_max_tokens: If True, ignore EOS and generate exactly
-                          max_new_tokens. Use True for latency benchmark,
-                          False for quality evaluation.
-        is_onnx: To validate whether ORT or not.
-    Returns:
-        Tuple of (itl_list, tpot, n_generated) where:
-            itl_list: ITL in milliseconds for each token position.
-            tpot: Mean ITL across all positions in milliseconds.
-            n_generated: Total token generated 
-    """
+    
     if max_new_tokens is None:
         max_new_tokens = CONFIG["benchmark"]["max_new_tokens"]
     
-    input_ids = tokenizer(
-        prompt,
-        return_tensors="pt",
-    ).input_ids.to(DEVICE)
-    
+    input_ids       = tokenizer(prompt, return_tensors="pt").input_ids.to(DEVICE)
     past_key_values = None
-    generated = input_ids.clone()
-    itl_list = []
+    generated       = input_ids.clone()
+    itl_list        = []
     
     for step in range(max_new_tokens):
-        current_input = generated if past_key_values is None else generated[:, -1:]
-        current_mask = torch.ones(
+        current_input = generated if past_key_values is None \
+                        else generated[:, -1:]
+        current_mask  = torch.ones(
             1, generated.shape[1],
             dtype=torch.long,
             device=DEVICE
@@ -200,38 +126,23 @@ def measure_itl_and_tpot(
         t_start = time.perf_counter()
         
         with torch.no_grad():
-            if is_onnx:
-                inputs = {
-                    "input_ids": current_input.cpu().numpy(),
-                    "attention_mask": current_mask.cpu().numpy()
-                }
-                logits = torch.tensor(
-                    model.run(['logits'], inputs)[0]
-                ).to(DEVICE)
-                
-                next_token = torch.argmax(
-                    logits[:, -1, :], dim=-1, keepdim=True
-                )
-                past_key_values = None
-            else:   
-                outputs = model(
-                    current_input,
-                    attention_mask=current_mask,
-                    past_key_values=past_key_values,
-                    use_cache=True
-                )
-                next_token = torch.argmax(
-                    outputs.logits[:, -1, :],
-                    dim=-1, keepdim=True
-                )
-                past_key_values = outputs.past_key_values
+            outputs     = model(
+                current_input,
+                attention_mask=current_mask,
+                past_key_values=past_key_values,
+                use_cache=True
+            )
+            next_token      = torch.argmax(
+                outputs.logits[:, -1, :],
+                dim=-1, keepdim=True
+            )
+            past_key_values = outputs.past_key_values
         
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         
-        t_end = time.perf_counter()
-        
-        itl_ms = (t_end - t_start) * 1000 # MS
+        t_end  = time.perf_counter()
+        itl_ms = (t_end - t_start) * 1000
         itl_list.append(itl_ms)
         
         generated = torch.cat([generated, next_token], dim=-1)
@@ -240,7 +151,7 @@ def measure_itl_and_tpot(
             if next_token.item() == tokenizer.eos_token_id:
                 break
     
-    tpot = float(np.mean(itl_list))
+    tpot        = float(np.mean(itl_list))
     n_generated = len(itl_list)
     
     return itl_list, tpot, n_generated
@@ -250,7 +161,6 @@ def measure_perplexity(
     tokenizer: AutoTokenizer, 
     max_samples: Optional[int] = None,
     stride: Optional[int] = None,
-    is_onnx: bool = False
 ) -> float:
     """
     Computes perplexity on WikiText-103 using a sliding window approach.
@@ -269,7 +179,6 @@ def measure_perplexity(
                      Defaults to config value.
         stride: Sliding window stride in tokens.
                 Defaults to config value.
-        is_onnx: To validate whether onnxruntime or not
 
     Returns:
         Perplexity score as a float. Lower is better.
@@ -288,7 +197,7 @@ def measure_perplexity(
         split='test'
     )
     
-    samples = [s for s in dataset['text'] if len(s.strip()) > 0][:max_samples]
+    samples   = [s for s in dataset['text'] if len(s.strip()) > 0][:max_samples]
     full_text = "\n\n".join(samples)
     
     encodings = tokenizer(
@@ -297,49 +206,34 @@ def measure_perplexity(
         truncation=False
     )    
     
-    input_ids = encodings.input_ids.to(DEVICE)
-    seq_len = input_ids.shape[1]
+    input_ids  = encodings.input_ids.to(DEVICE)
+    seq_len    = input_ids.shape[1]
     max_length = CONFIG['benchmark'].get('max_length', 2048)
-    loss_fn = torch.nn.CrossEntropyLoss(reduction="sum", ignore_index=-100)
+    loss_fn    = torch.nn.CrossEntropyLoss(reduction="sum", ignore_index=-100)
     
-    nlls = []
+    nlls     = []
     prev_end = 0
     
     for begin in range(0, seq_len, stride):
-        end = min(begin + max_length, seq_len)
+        end        = min(begin + max_length, seq_len)
         target_len = end - prev_end
         
         window_input = input_ids[:, begin:end]
-        
-        target_ids = window_input.clone()
+        target_ids   = window_input.clone()
         target_ids[:, :-target_len] = -100
         
         with torch.no_grad():
-            if is_onnx:
-                inputs = {
-                    "input_ids": window_input.cpu().numpy(),
-                    "attention_mask": torch.ones_like(
-                        window_input
-                    ).cpu().numpy()
-                }
-                
-                logits = torch.tensor(
-                    model.run(['logits'], inputs)[0]
-                )
-                
-                shift_logits = logits[:, :-1, :].contiguous()
-                shift_labels = target_ids[:, 1:].contiguous()
-                
-                nll = loss_fn(
-                    shift_logits.view(-1, shift_logits.size(-1)),
-                    shift_labels.view(-1),
-                )
-            else:
-                outputs = model(
-                    window_input,
-                    labels=target_ids
-                )
-                nll = outputs.loss * target_len
+            outputs      = model(
+                input_ids=window_input,
+                attention_mask=torch.ones_like(window_input),
+            )
+            logits       = outputs.logits
+            shift_logits = logits[:, :-1, :].contiguous()
+            shift_labels = target_ids[:, 1:].contiguous()
+            nll = loss_fn(
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1),
+            )
                 
         nlls.append(nll)
         prev_end = end
@@ -347,7 +241,7 @@ def measure_perplexity(
         if end == seq_len:
             break
     
-    total_nll = torch.stack(nlls).sum()
+    total_nll  = torch.stack(nlls).sum()
     perplexity = torch.exp(total_nll / prev_end).item()
     
     return perplexity
@@ -373,7 +267,6 @@ def generate_measure(
     config: Optional[dict] = None,
     label: str = "experiment",
     measure_perplexity_score: bool = True,
-    is_onnx: bool = False,
     enable_profiler: bool = False,
     custom_prompt: Optional[str] = None
 ) -> dict:
@@ -389,16 +282,15 @@ def generate_measure(
     than another, not just that it is faster.
 
     Args:
-        model: PyTorch model or OnnxRuntime InferenceSession.
+        model: PyTorch model or ORTModelForCausalLM.
         tokenizer: Corresponding tokenizer.
         config: Optional override config. Defaults to global CONFIG.
-        label: Human-readable name for this experiment
-               e.g. "float32", "int4_nf4", "gptq".
+        label: Human-readable name for this experiment.
         measure_perplexity_score: If True, compute perplexity
                                   on WikiText-103.
-        is_onnx: If True, uses ONNX path in perplexity measurement.
         enable_profiler: If True, runs PyTorch profiler and saves
                          chrome trace to results/traces/.
+        custom_prompt: Optional prompt override. Defaults to config value.
 
     Returns:
         Dictionary containing all benchmark metrics for this experiment.
@@ -406,17 +298,18 @@ def generate_measure(
     if config is None:
         config = CONFIG
     
-    cfg = config['benchmark']
+    cfg        = config['benchmark']
     prompt_cfg = config['prompt']
     results_cfg = config['results']
     
-    prompt = custom_prompt if custom_prompt is not None else format_prompt(prompt_cfg['user'])
-    n_runs = cfg['n_runs']
+    prompt         = custom_prompt if custom_prompt is not None \
+                     else format_prompt(prompt_cfg['user'])
+    n_runs         = cfg['n_runs']
     max_new_tokens = cfg['max_new_tokens']
     
     stabilize_environment()
     
-    # warmup run - not measured, just to prime GPU kernel cache
+    # warmup run — not measured, just to prime GPU kernel cache
     input_ids = tokenizer(
         prompt,
         return_tensors="pt"
@@ -427,35 +320,26 @@ def generate_measure(
             input_ids,
             attention_mask=torch.ones_like(input_ids),
             max_new_tokens=1,
-            do_sample=False # Greedy search
-        ) if not is_onnx else model.run(
-            ['logits'],
-            {
-                "input_ids": input_ids.cpu().numpy(),
-                "attention_mask": torch.ones_like(input_ids).cpu().numpy()
-            }
+            do_sample=False
         )
     
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     
-    
     # collect TTFT across n_runs
     ttft_runs = []
-    
     for _ in range(n_runs):
         ttft = measure_ttft(
             model=model,
             tokenizer=tokenizer,
             prompt=prompt,
             warmup=False,
-            is_onnx=is_onnx
         )
         ttft_runs.append(ttft)
     
     # collect ITL across n_runs
-    all_itl = []
-    tpot_runs = []
+    all_itl          = []
+    tpot_runs        = []
     n_generated_runs = []
     
     for _ in range(n_runs):
@@ -465,17 +349,16 @@ def generate_measure(
             prompt=prompt,
             max_new_tokens=max_new_tokens,
             force_max_tokens=True,
-            is_onnx=is_onnx
         )    
         all_itl.extend(itl_list)
         tpot_runs.append(tpot)
         n_generated_runs.append(n_generated)
     
-    # profiler - only runs once, seperate from measurement loop
+    # profiler — only runs once, separate from measurement loop
     trace_path = None
     
     if enable_profiler:
-        trace_dir = Path(results_cfg['traces_dir'])
+        trace_dir  = Path(results_cfg['traces_dir'])
         trace_dir.mkdir(parents=True, exist_ok=True)
         trace_path = str(trace_dir / f"{label}_trace.json")
         
@@ -484,8 +367,7 @@ def generate_measure(
             return_tensors="pt"
         ).input_ids.to(DEVICE)
         
-
-        profiler_mask = torch.ones_like(profiler_input)
+        profiler_mask  = torch.ones_like(profiler_input)
         profiler_steps = CONFIG['profiler']['max_new_tokens']
         
         with torch.profiler.profile(
@@ -498,95 +380,71 @@ def generate_measure(
             with_stack=CONFIG['profiler']['with_stack']
         ) as prof:
             with torch.no_grad():
-                if is_onnx:
-                    generated = profiler_input.clone()
-                    
-                    for _ in range(profiler_steps):
-                        inputs = {
-                            "input_ids": generated.cpu().numpy(),
-                            "attention_mask": torch.ones(
-                                1, generated.shape[1],
-                                dtype=torch.long).numpy()
-                        }
-                        
-                        logits = torch.tensor(model.run(
-                            ['logits'], inputs)[0]
-                        )
-                        
-                        next_token = torch.argmax(
-                            logits[:, -1, :], dim=-1, keepdim=True
-                        )
-                        
-                        generated = torch.cat([generated, next_token], dim=-1)
-                else:
-                    _ = model.generate(
-                        profiler_input,
-                        attention_mask=profiler_mask,
-                        max_new_tokens=CONFIG['profiler']['max_new_tokens'],
-                        do_sample=False
-                    )
+                _ = model.generate(
+                    profiler_input,
+                    attention_mask=profiler_mask,
+                    max_new_tokens=profiler_steps,
+                    do_sample=False
+                )
         
         prof.export_chrome_trace(trace_path)
-        
+    
     # aggregate TTFT statistics
-    ttft_p50    = float(np.percentile(ttft_runs, 50))
-    ttft_p90    = float(np.percentile(ttft_runs, 90))
-    ttft_p99    = float(np.percentile(ttft_runs, 99))
-    ttft_mean   = float(np.mean(ttft_runs))
+    ttft_p50  = float(np.percentile(ttft_runs, 50))
+    ttft_p90  = float(np.percentile(ttft_runs, 90))
+    ttft_p99  = float(np.percentile(ttft_runs, 99))
+    ttft_mean = float(np.mean(ttft_runs))
     
     # aggregate ITL statistics across all runs
-    itl_p50     = float(np.percentile(all_itl, 50))        
-    itl_p90     = float(np.percentile(all_itl, 90))        
-    itl_p99     = float(np.percentile(all_itl, 99))        
-    itl_mean    = float(np.mean(all_itl))
-    itl_std     = float(np.std(all_itl))
+    itl_p50  = float(np.percentile(all_itl, 50))        
+    itl_p90  = float(np.percentile(all_itl, 90))        
+    itl_p99  = float(np.percentile(all_itl, 99))        
+    itl_mean = float(np.mean(all_itl))
+    itl_std  = float(np.std(all_itl))
     
-    # TPOT - mean across runs
-    tpot_mean   = float(np.mean(tpot_runs))
+    # TPOT — mean across runs
+    tpot_mean = float(np.mean(tpot_runs))
     
-    # E2E latency - TTFT + total decode time
-    # total decode time = tpot_mean * mean tokens generated
+    # E2E latency
     mean_n_generated = float(np.mean(n_generated_runs))
-    e2e_ms      = ttft_mean + (tpot_mean * mean_n_generated)
+    e2e_ms           = ttft_mean + (tpot_mean * mean_n_generated)
     
-    # throughput - tokens per second
-    # tpot_mean is ms per token, convert to seconds
-    throughput_tps   = 1000.0 / tpot_mean if tpot_mean > 0 else 0.0
+    # throughput
+    throughput_tps = 1000.0 / tpot_mean if tpot_mean > 0 else 0.0
     
-    # perplexity - run once, not n_runs time
+    # perplexity — run once
     perplexity = None
     if measure_perplexity_score:
         perplexity = measure_perplexity(
             model=model,
             tokenizer=tokenizer,
-            is_onnx=is_onnx
         )
     
-    # peak GPU memory usage in MB
+    # peak GPU memory
     peak_memory_mb = None
     if torch.cuda.is_available():
         peak_memory_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
         
     results = {
-        "label": label,
-        "ttft_p50_ms": ttft_p50,
-        "ttft_p90_ms": ttft_p90,
-        "ttft_p99_ms": ttft_p99,
-        "ttft_mean_ms": ttft_mean,
-        "itl_p50_ms": itl_p50,
-        "itl_p90_ms": itl_p90,
-        "itl_p99_ms": itl_p99,
-        "itl_mean_ms": itl_mean,
-        "itl_std_ms": itl_std,
+        "label":            label,
+        "ttft_p50_ms":      ttft_p50,
+        "ttft_p90_ms":      ttft_p90,
+        "ttft_p99_ms":      ttft_p99,
+        "ttft_mean_ms":     ttft_mean,
+        "itl_p50_ms":       itl_p50,
+        "itl_p90_ms":       itl_p90,
+        "itl_p99_ms":       itl_p99,
+        "itl_mean_ms":      itl_mean,
+        "itl_std_ms":       itl_std,
         "itl_per_position": all_itl,
-        "tpot_mean_ms": tpot_mean,
-        "e2e_ms": e2e_ms,
-        "throughput_tps": throughput_tps,
+        "tpot_mean_ms":     tpot_mean,
+        "e2e_ms":           e2e_ms,
+        "throughput_tps":   throughput_tps,
         "mean_n_generated": mean_n_generated,
-        "peak_memory_mb": peak_memory_mb,
-        "perplexity": perplexity,
-        "n_runs": n_runs,
-        "trace_path": trace_path,
+        "peak_memory_mb":   peak_memory_mb,
+        "perplexity":       perplexity,
+        "n_runs":           n_runs,
+        "trace_path":       trace_path,
     }
     
     return results

@@ -158,7 +158,6 @@ def run_onnx(
         label="onnx_runtime",
         enable_profiler=enable_profiler,
         measure_perplexity_score=True,
-        is_onnx=True,
     )
 
     if save:
