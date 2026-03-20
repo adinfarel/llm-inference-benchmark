@@ -38,10 +38,10 @@ NF4 optimizes quantization points for normal weight distributions.
 AWQ protects salient weights based on activation magnitude before quantizing.
 This project measures which approach preserves perplexity better on TinyLlama.
 
-**Q3 - Does Flash Attention actually flatten ITL at long sequences on T4?**
+**Q3 - Does Flash Attention actually flatten ITL at long sequences on T4?** 
 Standard attention has O(n*n) memory complexity - every token attends to every other token, and intermediate results must pass through HBM repeatedly. Flash Attention tiles the computation to stay in SRAM. This project measures whether ITL stays flat from token 1 to token 1000, or starts degrading.
 
-**Q4 - At which token position does KV cache pressure become visible?**
+**Q4 - At which token position does KV cache pressure become visible?** 
 KV cache grows every generated token. At same point, the cache size starts pressuring GPU memory and ITL begins to rise. This project maps the inflection point by measuring ITL per token position across 1000 tokens.
 
 **Q5 - What is the optimal batch size for throughput on a T4?**  
@@ -196,6 +196,18 @@ Full analysis → `docs/04_distillation.md`
 
 Full analysis → `docs/05_flash_attention.md`
 
+### KV Cache
+
+| label | max_new_tokens | itl_p50_ms | itl_p99_ms | throughput_tps | peak_memory_mb |
+|------------------|----------------|------------|------------|----------------|----------------|
+| kv_cache_100tok  | 100  | 30.94 | 55.60 | 29.1 | 2113 |
+| kv_cache_300tok  | 300  | 30.15 | 51.43 | 30.2 | 2122 |
+| kv_cache_500tok  | 500  | 29.87 | 51.61 | 30.6 | 2132 |
+| kv_cache_750tok  | 750  | 29.81 | 53.04 | 30.4 | 2143 |
+| kv_cache_1000tok | 1000 | 30.01 | 51.31 | 30.4 | 2155 |
+
+Full analysis → `docs/06_kv_cache.md`
+
 ## Findings
 
 Key findings are updated as research questions are answered.
@@ -203,7 +215,7 @@ Full hardware-level explanation for each finding is in the linked docs.
 
 **Q1 — Int4 quantization speed-up inference on GPU?** — *pending*   
 **Q2 — Between nf4 vs AWQ, which the best?** — *pending*    
-**Q3 — Flash Attention ITL flattening on T4**
+**Q3 — Flash Attention ITL flattening on T4**   
 ITL flattening not observed. itl_p50 identical between standard and
 flash_attn at 1024 tokens (34.5ms vs 34.4ms). Flash Attention via SDPA
 is 40% slower at TTFT for 1024 token prompts (350.7ms vs 251.0ms).
@@ -212,7 +224,15 @@ Attention tiling relies on. SDPA dispatcher overhead outweighs HBM
 traffic reduction on this architecture. Expected to differ on Ampere.
 Full breakdown → `docs/05_flash_attention.md`
 
-**Q4 — KV cache pressure inflection point** — *pending*      
+**Q4 — KV cache pressure inflection point**     
+Pressure not visible within TinyLlama 1.1B context window (1000 tokens).
+KV cache at token 1000 = 180MB, contributing ~0.6ms to ITL against
+30ms baseline from weight loading — below measurement noise floor.
+Inflection point estimated at ~10,000–12,000 tokens, beyond TinyLlama
+max context of 2048. Pressure would be visible at this scale with a
+larger model (7B+) where KV cache per token is significantly larger.
+Full breakdown → `docs/06_kv_cache.md`
+      
 **Q5 — Optimal batch size on T4** — *pending*   
 **Q6 — TTFT scaling with prompt length**
 Standard attention TTFT scales consistently with prompt length —
