@@ -51,7 +51,7 @@ Attention cost at short sequences:
 ```
 
 ![TTFT Breakdown](../../results/figures/context_length/ttft_breakdown.png)      
-*Figure 1: Estimated TTFT breakdown into fixed overhead (blue) and attention component (red).
+*Figure 1: Estimated TTFT breakdown into fixed overhead (blue) and attention component (red).*
 
 This is why TTFT looks flat from 34 to 265 tokens — not because there is no scaling, but because the quadratic component is too small to emerge above the fixed overhead floor.
 
@@ -89,7 +89,7 @@ Scaling ratio test:
 ```
 
 ![TTFT vs Prompt Length](../../results/figures/context_length/ttft_vs_prompt_length.png)    
-*Figure 2: TTFT p50 across prompt lengths. Green region = flat zone where fixed overhead
+*Figure 2: TTFT p50 across prompt lengths. Green region = flat zone where fixed overhead*
 
 ## 4. Answer to Q6  
 ```
@@ -121,7 +121,7 @@ Answer: Yes, but only above a sequence length threshold.
 ```
 
 ![Scaling Ratio](../../results/figures/context_length/scaling_ratio.png)    
-*Figure 3: Actual TTFT ratio vs theoretical O(N) and O(N²) predictions, baseline at 265 tokens.
+*Figure 3: Actual TTFT ratio vs theoretical O(N) and O(N²) predictions, baseline at 265 tokens.*
 
 ## 5. Production Implications   
 ```

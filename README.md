@@ -208,6 +208,35 @@ Full analysis → `docs/05_flash_attention.md`
 
 Full analysis → `docs/06_kv_cache.md`
 
+### Context Length
+
+| label | prompt_length | ttft_p50_ms |
+|----------------------|---------------|-------------|
+| context_len(32) | 34 | 61.5 |
+| context_len(64) | 67 | 59.9 |
+| context_len(128) | 133 | 62.0 |
+| context_len(256) | 265 | 60.2 |
+| context_len(512) | 518 | 114.9 |
+| context_len(1024) | 1024 | 288.6 |
+
+*p90/p99 not reported — inflated by warmup artifact at first run per length.
+p50 is valid as representative steady-state measurement.*  
+Full analysis → `docs/07_context_length.md`
+
+### Batching
+
+| batch_size | throughput_p50_tps | latency_p50_ms | latency_p99_ms |
+|------------|-------------------|----------------|----------------|
+| 1  | 32.2  | 1555.1 | — |
+| 2  | 51.1  | 979.0  | — |
+| 4  | 125.0 | 400.0  | — |
+| 8  | 246.5 | 202.8  | — |
+| 16 | 432.6 | 115.6  | — |
+| 32 | 897.9 | 55.7   | 58.2 |
+
+*p99 only available for batch=32 — other batch sizes pending re-run with save=True.*  
+Full analysis → `docs/08_batching.md`
+
 ## Findings
 
 Key findings are updated as research questions are answered.
@@ -233,13 +262,33 @@ max context of 2048. Pressure would be visible at this scale with a
 larger model (7B+) where KV cache per token is significantly larger.
 Full breakdown → `docs/06_kv_cache.md`
       
-**Q5 — Optimal batch size on T4** — *pending*   
-**Q6 — TTFT scaling with prompt length**
-Standard attention TTFT scales consistently with prompt length —
-45.5ms at 128 tokens to 251.0ms at 1024 tokens — confirming memory
-bandwidth bottleneck at prefill phase. Not perfectly quadratic because
-prefill includes linear-scaling operations alongside quadratic attention.
-Full breakdown → `docs/05_flash_attention.md`    
+**Q5 — Optimal batch size for throughput on T4**    
+No throughput saturation observed up to batch=32 for TinyLlama 1.1B.
+Throughput grows from 32.2 tps at batch=1 to 897.9 tps at batch=32 —
+a 27.9x improvement from amortizing 2.2GB weight loading across more requests.
+Root cause of no plateau: TinyLlama only uses ~2.7GB of T4's 16GB VRAM
+at batch=32, leaving significant memory and compute headroom.
+Scaling efficiency drops from 100% to ~87% at batch=32 due to
+padding overhead and scheduling cost in naive batching.
+Production recommendation: batch=16 for real-time chat (SLA <100ms,
+latency=115ms borderline), batch=32 for async pipelines.
+True optimal batch size for TinyLlama on T4 estimated at batch=64–128
+where compute saturation would begin.
+Full breakdown → `docs/08_batching.md`
+
+**Q6 — TTFT scaling with prompt length**     
+TTFT stays flat between 34 and 265 tokens (60–62ms) because fixed
+overhead — weight loading 2.2GB, 220 kernel launches, MLP and layer norm —
+dominates and masks the quadratic attention component entirely.
+Above 265 tokens, attention matrix grows large enough to add measurable
+HBM traffic. At 518 tokens TTFT reaches 114.9ms (1.91x baseline),
+at 1024 tokens 288.6ms (4.79x baseline) — super-linear, consistent with
+mixed O(N²) attention and O(N) linear operations.
+Crossover point: between 265 and 518 tokens on T4.
+Production implication: benchmarking with short prompts gives false
+confidence — quadratic cost only manifests at production-realistic
+context lengths (RAG, long conversation, multi-modal).
+Full breakdown → `docs/07_context_length.md`    
 
 **Q7 — Production cost of distillation**  
 Student (1.1B) is 2.23x faster at TTFT and uses 2.6x less VRAM than teacher (3B).
