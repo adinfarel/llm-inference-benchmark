@@ -23,11 +23,11 @@ The answer turned out to be a hardware story. Running an initial exploration on 
 techniques behave very differently depending on the hardware they run on. int4 quantization was **7x slowe** than float32
 on CPU - not because of a bug, but because CPU has no native integer arithmetic. The model had to dequantize weights back to float32 before every computation, making the overhead larger than the memory saving
 
-That exploration raised 7 questions that could not be answered on CPU alone. This project exists to answer all of them - on a GPU where these techniques were actually designed to run.
+That exploration raised 9 questions that could not be answered on CPU alone. This project exists to answer all of them - on a GPU where these techniques were actually designed to run.
 
 ## Research Questions
 
-This project is built around 7 questions that emerged from the CPU exploration and could not be answered without a proper GPU environment.
+This project is built around 9 questions that emerged from the CPU exploration and could not be answered without a proper GPU environment.
 
 **Q1 - Does int4 quantization actually speed up inference on GPU?**
 On CPU, int4 was 7x slower than float32 due to dequantization overhead. On GPU with Tensor Core native integer arithmetic, the expectation flips. This project measures whether that theoretical advantage holds in practice
@@ -65,6 +65,14 @@ fixed overhead regardless of computation size. torch.compile fuses operations
 and reduces kernel launches at compile time. This project measures whether
 that translates to measurable throughput improvement over float16 baseline.
 
+**Q9 - Does static graph execution (ONNX Runtime) reduce dispatch overhead compared to PyTorch dynamic graph?** 
+PyTorch eager mode dispatches ~220 kernel launches per token, each with fixed
+CPU overhead before GPU execution begins. ONNX Runtime resolves the full
+execution plan at load time — inference runs with zero Python dispatch per token.
+This project measures the empirical difference in ITL between PyTorch dynamic
+graph and ONNX static graph execution, and whether dispatch overhead elimination
+translates to measurable throughput improvement on T4.
+
 ## Environment
 
 | Component | Details |
@@ -96,7 +104,7 @@ not just averages — because production SLAs are defined at p99, not mean.
 | Quantization | float32, float16, int8, int4 NF4, compiled, AWQ | Does int4 beat float16 on GPU? |
 | Pruning | Sparsity 10%, 30%, 50%, 70% | Where does quality collapse? |
 | Distillation | Teacher (OpenLLaMA 3B) vs Student (TinyLlama 1.1B) | Does the speed advantage justify the quality gap? |
-| Runtime | ONNX, TensorRT, torch.compile() | Which runtime wins on T4? |
+| Runtime | ONNX and torch.compile() | Which runtime wins on T4? |
 | Flash Attention | FA on vs off × sequence length | Does ITL stay flat at 1000 tokens? |
 | Serving | Batch size 1, 2, 4, 8, 16, 32 | What is the throughput sweet spot? |
 | Context Length | Prompt 32 to 1024 tokens | Does TTFT scale quadratically? |
@@ -237,6 +245,18 @@ Full analysis → `docs/07_context_length.md`
 *p99 only available for batch=32 — other batch sizes pending re-run with save=True.*  
 Full analysis → `docs/08_batching.md`
 
+### ONNX Runtime
+
+| label | ttft_p50_ms | itl_p50_ms | itl_p99_ms | throughput_tps | peak_memory_mb | perplexity |
+|--------------|-------------|------------|------------|----------------|----------------|------------|
+| float16 (baseline) | 44.5 | 35.2 | 63.4 | 25.6 | 3589 | 7.817 |
+| onnx_runtime | 68.0 | 33.6 | 96.1 | 22.7 | 2774 | 7.816 |
+
+*ONNX Runtime via ORTModelForCausalLM (Optimum). ITL p50 4.5% better,
+TTFT 53% worse. Full dispatch elimination not achieved due to
+HuggingFace wrapper overhead and dynamic KV cache shapes.*  
+Full analysis → `docs/09_onnx.md`
+
 ## Findings
 
 Key findings are updated as research questions are answered.
@@ -304,6 +324,18 @@ at every new sequence length. itl_std of 962ms confirms recompilation spikes.
 Fix planned: `torch.compile(model, dynamic=True)` in GCP re-run.
 Full breakdown → `docs/01_quantization.md`
 
+**Q9 — ONNX Runtime dispatch overhead elimination**
+Partial dispatch elimination confirmed — ITL p50 improved 4.5%
+(33.6ms vs 35.2ms) but TTFT degraded 53% (68.0ms vs 44.5ms).
+Throughput 11% lower than float16 baseline (22.7 vs 25.6 tps).
+Memory footprint 23% smaller (2,774MB vs 3,589MB).
+Perplexity identical (7.816 vs 7.817) — quality preserved.
+Full elimination not achieved: ORTModelForCausalLM wrapper retains
+Python generate() loop overhead, dynamic KV cache shapes prevent
+full static graph optimization. Raw OnnxRuntime InferenceSession
+or TensorRT expected to show larger benefit — planned for GCP Phase 2.
+Full breakdown → `docs/09_onnx.md`
+
 ## Limitations
 
 **AWQ and GPTQ excluded from quantization experiment**  
@@ -347,3 +379,22 @@ Both standard and SDPA show ITL spikes at token position ~100 and ~200.
 Root cause: KV cache tensor shape change triggers PyTorch dynamic graph
 recompilation. Not memory pressure — recompilation overhead.
 Fix: torch.compile with dynamic=True. Planned for GCP re-run.
+
+**ONNX Runtime via wrapper, not raw InferenceSession**
+ORTModelForCausalLM from Optimum retains Python generate() loop —
+dispatch overhead partially eliminated, not fully.
+Raw OnnxRuntime InferenceSession would show cleaner benefit
+but requires manual token generation loop without HuggingFace utilities.
+Planned for GCP Phase 2 alongside TensorRT comparison.
+
+**TensorRT not tested — requires GCP Cloud Console access**
+TensorRT is NVIDIA's production inference optimizer with T4-specific
+kernel compilation. Expected to outperform both PyTorch eager and
+ONNX Runtime by compiling model to hardware-optimized execution plan.
+Requires GCP environment with proper CUDA toolkit — planned for Phase 2.
+
+**ONNX perplexity uses manual logit extraction**
+ORTModelForCausalLM does not support labels parameter in forward pass.
+Perplexity computed via manual logit extraction and CrossEntropyLoss.
+Result verified identical to float16 baseline (7.816 vs 7.817) —
+methodology documented in src/benchmark_core.py measure_perplexity().

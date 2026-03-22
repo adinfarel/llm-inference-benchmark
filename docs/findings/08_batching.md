@@ -270,6 +270,7 @@ Q5: What is the optimal batch size for throughput on T4?
         For real-time chat SLA < 100ms: batch=16 is the ceiling.
         For async batch processing: batch=32+ maximizes throughput.
 ```
+
 ![Throughput vs Batch Size](../../results/figures/batching/throughput_vs_batch_size.png)        
 *Figure 1: Throughput grows consistently with no saturation at batch=32.
 Actual line stays below theoretical linear due to padding and scheduling overhead.
