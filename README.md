@@ -8,7 +8,7 @@
 ![Architecture Overview](docs/images/inference-flow-bg.png)
 
 **Author:** Adin Ramdan Farelino  
-**Hardware:** GCP T4 GPU (16GB VRAM)    
+**Hardware:** Google Colab T4 GPU (16GB VRAM)    
 **Model:** TinyLLama/TinyLlama-1.1B-Chat-v1.0  
 **Status:** In Progress - actively running experiments  
 
@@ -77,7 +77,7 @@ translates to measurable throughput improvement on T4.
 
 | Component | Details |
 |-----------|---------|
-| Cloud | Google Cloud Platform |
+| Cloud | Google Colab |
 | VRAM | 16GB GDDR6 |
 | CUDA | 12.8 |
 | Python | 3.10 |
@@ -85,7 +85,6 @@ translates to measurable throughput improvement on T4.
 | Transformers | 4.38.0 |
 | Model | TinyLlama/TinyLlama-1.1B-Chat-v1.0 |
 | Parameters | 1.1 Billion |
-| Evaluation Dataset | WikiText-103 |
 
 ## Experiment Overview
 
@@ -120,14 +119,7 @@ requirement of this project - not an afterthought
 git clone https://github.com/adinfarel/llm-inference-benchmark.git  
 cd llm-inference-benchmark
 
-### 2. Set up the environment
-
-bash setup.sh
-
-This script installs all dependencies, confirms CUDA availability,
-and validates the model can be loaded before any experiment runs.
-
-### 3. Run all experiments
+### 2. Run all experiments
 
 python experiments/run_all.py
 
@@ -137,14 +129,14 @@ python experiments/run_quantization.py
 python experiments/run_flash_attention.py  
 python experiments/run_kv_cache.py  
 
-### 4. View results
+### 3. View results
 
 Results are saved to results/metrics/ as CSV files.  
 Analysis notebooks are in analysis/ - open them in order,  
 starting from 01_quantization.ipynb.  
 
 > Note: All experiments require a CUDA-capable GPU with minimum 16GB VRAM
-> Tested on GCP n1-standard-4 with NVIDIA t4
+> Tested on Google Colab
 
 ## Results  
 
